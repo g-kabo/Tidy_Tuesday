@@ -1,0 +1,183 @@
+---
+title: "2020-10-20 Tidy Tuesday: Beer Awards"
+date: "20/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(skimr)
+```
+
+We will investigate the tidy tuesday dataset for 20/10/2020. The dataset deals with beer awards
+
+Let's read the data and quickly view what is happening.
+
+```{r, results='hide', message=FALSE}
+beer_awards <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-10-20/beer_awards.csv')
+```
+
+
+```{r}
+beer_awards
+```
+
+```{r}
+skim(beer_awards)
+```
+We will factor all the variables
+
+```{r}
+beer_awards_fct = beer_awards %>%
+  mutate(medal = factor(medal, levels = c("Bronze","Silver","Gold") ),
+         state = str_to_upper(state),
+         across(where(is.character),as.factor)
+         )
+beer_awards_fct
+```
+
+Let's see the number of awards given by year
+
+```{r}
+medal_colors = c("#965A38","#BFC1C2","#DFBC00") # bronze, silver, and gold
+
+
+beer_awards_fct %>%
+  ggplot(aes(x=year,fill=medal))+
+  stat_count()+
+  scale_fill_manual(values=medal_colors)+
+  theme_minimal()+
+  theme(legend.position = "top",
+        panel.grid.major.x  = element_blank(),
+        panel.grid.minor.x  = element_blank() )+
+  labs(title="More Medals Are Given Out As Time Passes",fill="Medal",x="Year",y="Number of Medals")
+
+```
+
+We clearly see a trend that more medals are awarded over time, though we notice that there has been a recent dip in 2020, though given the known circumstances of a global pandemic, it shouldn't be too surprising that there was a dip.
+
+```{r, fig.height=9,fig.width=12}
+beer_awards_fct %>%
+  count(state,medal) %>%
+  ggplot(aes(x=reorder(state,n, FUN = sum ),y=n))+
+  geom_col(aes(fill=medal))+
+  geom_text(aes(label= stat(y)),
+                  stat = 'summary', fun = sum, vjust = -0.5,size=3   )+
+  scale_fill_manual(values=medal_colors)+
+  theme_minimal()+
+  theme(legend.position = "top", 
+        panel.grid.major.x = element_blank())+
+  labs(title="Californian Breweries Are The Most Successful",subtitle="Number Of Awards Received By State Of Brewery",x="State",y="Number of Awards",fill="Medal")
+```
+
+```{r}
+beer_awards_fct %>%
+group_by(brewery,medal)%>%
+  count() %>%
+  ungroup(medal) %>%
+  mutate(Total = sum(n)) %>%
+  arrange(-Total)%>%
+  ungroup() %>%
+  slice_max(n=30, order_by=Total)%>%    # Slightly hacky - use n=30 because Each Brewery can get 3 medals,and we want the top 10.
+  ggplot(aes(x=n,y=reorder(brewery,n,FUN=sum)))+
+  geom_col(aes(fill=medal))+
+  geom_text(aes(label= n,group=medal),size=3 ,position = position_stack(vjust = 0.5))+
+  geom_text(aes(label = paste0("(",stat(x),")" ) , group=brewery), stat = 'summary', fun = sum,col="black", nudge_x = 2,size=4,fontface="italic")+
+  scale_fill_manual(values=medal_colors)+
+  theme_minimal()+
+  theme(legend.position = "top", 
+        panel.grid.major.y = element_blank() )+
+  guides(fill = guide_legend(reverse=T))+
+  labs(title="Top 10 Breweries by Total Medal Count",subtitle = "Brackets Shows Total",x="Medal Count",y="Brewery",fill="Medal")
+
+
+```
+
+```{r}
+beer_awards_fct %>%
+  group_by(brewery,state,medal)%>%
+  count()%>%
+  ungroup(medal) %>%
+  mutate(Total = sum(n)) %>%
+  arrange(-Total)%>%
+  ungroup() %>%
+  slice_max(n=30, order_by=Total)  %>%    # Slightly hacky - use n=30 because Each Brewery can get 3 medals,and we want the top 10.
+  ggplot(aes(x=n,y=reorder(brewery,n,FUN=sum)))+
+  geom_col(aes(fill=medal))+
+  geom_text(aes(label= n,group=medal),size=3 ,position = position_stack(vjust = 0.5))+
+  geom_text(aes(label = paste0("(",stat(x),")" ) , group=brewery), stat = 'summary', fun = sum,col="black", nudge_x = 2,size=4,fontface="italic")+
+  geom_label(aes(x=0, label=state,group=brewery,col=state))+
+  scale_fill_manual(values=medal_colors)+
+  theme_minimal()+
+  theme(legend.position = "top", 
+        panel.grid.major.y = element_blank() )+
+  guides(fill = guide_legend(reverse=T),col=FALSE)+
+  labs(title="Top 10 Individual Breweries by Total Medal Count",subtitle = "With State Labelled",x="Medal Count",y="Brewery",fill="Medal")
+```
+
+Let's find which cities were best at crafting beers?
+
+```{r}
+beer_awards_fct %>%
+  count(city,state) %>%
+  arrange(-n) %>%
+  slice_max(order_by=n,n=10) %>%
+  ggplot(aes(x=n,y= reorder(city,n),fill=state  ))+
+  geom_col()+
+  geom_text(aes(label=n),hjust=-0.05)+
+  theme_minimal()+
+  theme(panel.grid.major.y = element_blank() )+
+  labs(title="Which Cities Are Home To The Most Awarded Breweries?",x="Number of Awards",y="City",fill="State")
+```
+
+Which Beer won the most?
+
+```{r}
+beer_awards_fct %>%
+  count(beer_name,brewery,city,state)%>%
+  arrange(-n) %>%
+  slice_head(n=10) %>%
+  rename("medals_won" = n) %>%
+ knitr::kable(caption="Top 10 awarded beers by brewery and city")
+```
+
+We see that the Alasken Snoked Porter was the best individual drink by brewery and city; winning 11 awards. Let's see how it performed over the years.
+
+```{r}
+beer_awards_fct %>%
+  filter(beer_name == "Alaskan Smoked Porter") %>%
+  ggplot(aes(x=year,y=medal,group=1))+
+  geom_line(lty=3)+
+  geom_point(aes(col=medal),size=6,show.legend = FALSE)+
+  theme_classic()+
+   scale_color_manual(values=medal_colors)+
+  labs(title="The Comeback of Alaskan Smoked Porter",subtitle="In the Catergory of Smoke-Flavored Beer",x="Year",y=NULL)
+```
+
+We see that Alaskan Smoked Porter was very popular during the early to mid 90s, but became less popular over time. It saw a resurgence in popularity in 2005 where it won gold.
+
+```{r, fig.height=8,fig.width=12}
+
+  top_beers = beer_awards_fct %>%
+  count(beer_name,brewery,city,state)%>%
+  slice_max(order_by = n, n=15) %>%
+  mutate(beer_name = fct_reorder(beer_name,-n))%>%
+  select(beer_name,city)
+  
+  top_beers %>%
+  inner_join(y=beer_awards_fct,by=c("beer_name","city"))%>%
+  ggplot(aes(x=year,y=medal,group=1))+
+  geom_line(lty=3)+
+  geom_point(aes(col=medal),size=3,show.legend = FALSE)+
+  facet_wrap(~beer_name)+
+  theme_bw()+
+   scale_color_manual(values=medal_colors)+
+  labs(title="Top Award Winning Beers",subtitle="Performance over Time For Beers Made By Unique Breweries In Cities",x="Year",y=NULL)
+```
+
+And finally, we see can see how the top awarding winning beers performed over time. We see that that Samuel Adams Double Bock performed very well and was the second best beer crafted by an individual brewery, it won the most amount of gold medals. We can also see that Belgian Red had all but one if it's medals as gold, showing a very high performance in the rankings.
+
