@@ -6,6 +6,6 @@
  
 |Date | Tidy Tuesday Data  | Web Page  | Blog | Code |
 |-|--------------------|----------|------|---|
-|2020-10-20 |   [Beer Awards ](https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-10-20/readme.md) | [Link]( https://rpubs.com/g_kabo/TT_Beer_Awards ) | WIP | |[Link](https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-10-20/readme.md) | 
+|2020-10-20 |   [Beer Awards ](https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-10-20/readme.md) | [Link]( https://rpubs.com/g_kabo/TT_Beer_Awards ) | WIP |[Link](https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-10-20/readme.md) | 
 | |  |   |   |
 | |  |   |   |
