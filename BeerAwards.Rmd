@@ -1,5 +1,5 @@
 ---
-title: "2020-10-20 Tidy Tuesday: Beer Awards"
+title: "Tidy Tuesday 2020-10-20 : Beer Awards"
 date: "20/10/2020"
 output: html_document
 ---
@@ -8,14 +8,17 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+We will investigate the tidy tuesday dataset for 20/10/2020. The dataset deals with beer awards. See the link for the data source: https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-10-20/readme.md
+
+Let's read the data and quickly view what is happening.
+
+
+
+
+```{r, results='hide', message=FALSE}
 library(tidyverse)
 library(skimr)
 ```
-
-We will investigate the tidy tuesday dataset for 20/10/2020. The dataset deals with beer awards
-
-Let's read the data and quickly view what is happening.
 
 ```{r, results='hide', message=FALSE}
 beer_awards <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-10-20/beer_awards.csv')

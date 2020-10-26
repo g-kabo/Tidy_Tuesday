@@ -1,0 +1,201 @@
+---
+title: 'Tidy Tuesday Rewind: Meteorites'
+date: "26/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,cache = TRUE,fig.align="center")
+```
+
+
+# Meteorites
+
+
+
+
+
+We will explore the dataset posted on 2019-06-11 edition of Tidy Tuesday. Link to original post: [Meteorites](https://github.com/rfordatascience/tidytuesday/tree/master/data/2019/2019-06-11) 
+
+
+```{r, message=FALSE}
+library(tidyverse)
+library(gganimate)
+```
+```{r, message=FALSE}
+meteorites <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-06-11/meteorites.csv")
+```
+
+
+There can be lots that can be discovered from the data, however, today we will only focus on the year and meteors that fell to Earth.
+
+```{r}
+meteorites
+```
+
+
+First we will clean the data and focus only on the meteorites that fell.   
+
+```{r}
+meteors = meteorites %>%
+  filter( fall == "Fell") %>%
+  mutate( mass = mass / 1000 ) %>%  # convert from grams to kg
+  select(name,mass,year,lat,long) %>%
+  na.omit()
+```
+
+
+
+
+```{r}
+meteors %>%
+  filter(year >= 1600) %>%
+  count(year) %>%
+  ggplot(aes(x=year,y=n))+
+  geom_line( )+
+  theme_bw()+
+  labs(title="Many Meteorites Where Detected in Recent Centuries")
+```
+
+We notice that there have been many sightings of fallen meteorites in recent centuries, and we see that that there has been a gradual uptick in the number discovered up until the 1940s. This could be due to more people being able to watch the skies or better access to technology as time passes. 
+
+Though in the past 50 years there as hasn't been as many detections, which can across as odd, since due to modern and sophisticated technology, surely we would be able to detect more meteorites? The answer could lie in the fact that meteorites are just really rare events.
+
+
+Let's look at the mass distribution of meteorites
+
+```{r}
+custom_length = 10^seq(-4,4,1) 
+
+
+ggplot(meteors, aes(x = mass)) +
+  geom_histogram(bins = 30, fill = "#05377b") +
+  scale_x_log10(label = paste0(modify(custom_length , function(x) {
+    if (x > 1) {
+      trunc(x )
+    } else{
+      x
+    }
+  })
+  , "kg")  ,
+  breaks = custom_length ) +
+  labs(title = "Most Meteors Weighted Around 0.1kg to 100kg ",subtitle = "Mass Distribution of Meteors With Log Base 10 Scale", x = "Mass (kg)", y = "Count")+
+  theme_minimal()+
+  theme(panel.grid.minor.x = element_blank(),
+        axis.line = element_line())
+```
+
+
+The masses of meteorites varied quite drastically, but when placed on a sensible scale, we see that the most common meteorite weight was about 5kg. The meteorites can weigh as little as a 0.1 grams to an enormous 10,000kg, which is the same weight as the bell of Big Ben!
+
+Below is an animation that shows the year and location of recorded meteorites.
+
+```{r, echo=FALSE, warning = FALSE}
+world <- map_data("world")
+
+p = ggplot() +
+  geom_map(data = world %>% filter(region != "Antarctica")  ,
+           map = world,aes(x = long, y = lat, map_id = region),color = "grey20",fill = "black",size = 0.05) +
+  geom_point(
+    data = meteors %>% filter(year >= 1) ,
+    mapping = aes(x = long,y = lat,group = year,col = log(mass, (10))),size = 2) +
+  scale_color_viridis_c(
+    option = "B",
+    begin = 0.2,
+    end = 1,
+    breaks = c(-4, -3, -2, -1, 0, 1, 2, 3, 4),
+    labels = c(
+      "0.001kg",
+      "0.001kg",
+      "0.01kg",
+      "0.1kg",
+      "1kg",
+      "10kg",
+      "100kg",
+      "1,000kg",
+      "10,000kg"
+    )
+  ) +
+  labs(
+    x = NULL,
+    y = NULL
+  ) +
+  theme_dark() +
+  theme(legend.position = "none",
+    plot.background = element_rect(fill = "grey50"),
+    legend.background = element_rect(fill = "grey50"),
+    title = element_text(size = 13, colour = "white"),
+    legend.text = element_text(color = "White"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    axis.text = element_blank()
+  )
+```
+
+```{r, echo=FALSE}
+
+anime =  p+ transition_time(year) +
+  labs(title = 'Recorded Meteor Landings From 820 to 2013: Year { trunc(frame_time) }')+
+  shadow_mark(alpha=0.1)
+
+
+animate(anime,   width = 600, height = 400,fps=30,end_pause = 60,duration = 30)
+
+
+
+```
+
+
+
+For the static version see below
+
+```{r, echo=FALSE, warning = FALSE, fig.width=6, fig.height=4}
+ggplot() +
+  geom_map(data = world %>% filter(region != "Antarctica")  ,
+           map = world,aes(x = long, y = lat, map_id = region),color = "grey20",fill = "black",size = 0.05) +
+  geom_point(
+    data = meteors ,
+    mapping = aes(x = long,y = lat,group = year,col = log(mass, (10))),size = 1,alpha=0.9) +
+  scale_color_viridis_c(
+    option = "B",
+    begin = 0.2,
+    end = 1,
+    breaks = c(-4, -3, -2, -1, 0, 1, 2, 3, 4),
+    labels = c(
+      "0.001kg",
+      "0.001kg",
+      "0.01kg",
+      "0.1kg",
+      "1kg",
+      "10kg",
+      "100kg",
+      "1,000kg",
+      "10,000kg"
+    )
+  ) +
+  labs(
+    x = NULL,
+    y = NULL,
+    color = "Mass",
+    title = "All Recorded Meteor Landings From 820 to 2013"
+  ) +
+  theme_dark() +
+  theme(
+    plot.background = element_rect(fill = "grey50"),
+    legend.background = element_rect(fill = "grey50"),
+    title = element_text(size = 10, colour = "white"),
+    legend.text = element_text(color = "White"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    axis.text = element_blank()
+  )
+```
+
+We see many recorded landings in densely populated areas such as: Europe, The East Coast of America, and India. 
+
+We notice that there are spots in the world that do not have any recorded meteorite landings. This includes places like: Northern Australia, Western China, Northern Russia, The Amazon, and so on .It seems unlikely that meteorites will not land in uninhabited places across the globe and we do not have many instances of recorded landings in the ocean, so we could attribute these blank areas as places where nobody was around to detect the falls.
+
+Just because we didn't see it, it doesn't mean it didn't happen.
+
+
+
