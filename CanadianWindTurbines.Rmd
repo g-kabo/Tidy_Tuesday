@@ -1,0 +1,751 @@
+---
+title: "Canadian Wind Turbines"
+date: "03/11/2020"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,cache=TRUE)
+
+library(tidyverse)
+library(ggridges)
+library(tidymodels)
+```
+
+
+# EDA
+
+The Tidy Tuesday dataset for 2020-10-27 was released and is about Canadian Wind Turbines. First, we will explore the data and see what insights we can obtain, then we will fit a model to predict the rated capacity of the turbines.
+
+Link: [Canadian Wind Turbines](https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-10-27/readme.md)
+
+```{r, message='hide'}
+wind_turbine <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-10-27/wind-turbine.csv')
+skimr::skim(wind_turbine)
+```
+
+```{r}
+wind_turbine %>%
+  filter(!is.na(turbine_rated_capacity_k_w)) %>%
+  ggplot((aes(x = turbine_rated_capacity_k_w))) +
+  geom_histogram(
+    bins = 7,
+    fill = "palegreen3",
+    col = "white",
+    alpha = .9
+  ) +
+  theme_classic() +
+  theme(panel.grid.major.y = element_line(),
+        panel.grid.minor.y = element_line()) +
+  labs(title = "Histogram Of Rated Turbine Capacity", x = "Rated Capacity (kW)", y =
+         "Count")+
+  scale_y_continuous(expand=c(0,0))
+```
+
+We see that the most common turbine rating capacity is around 1,500-2,000 kW.
+
+
+
+```{r}
+wind_turbine %>% 
+  count(province_territory,sort = TRUE,name = "Count") %>%
+  ggplot(aes(y=reorder(province_territory,Count),x=Count))+
+  geom_col(fill="cadetblue3")+
+  geom_text(aes(label=Count),hjust=-.1)+
+  theme_classic()+
+  theme(panel.grid.major.x = element_line(),
+        panel.grid.minor.x = element_line(),
+        axis.ticks.y = element_blank())+
+  labs(title="Number of Wind Turbines by Province",x="Number of Wind Turbines",y="Province")+
+  scale_x_continuous(expand=c(0,0),limits = c(0,2900))
+```
+
+Here we see the breakdown of number of wind turbines by territory. Ontario has the most wind turbines, with 2663 turbines and Yukon has the least, with just two. 
+
+
+```{r}
+wind_turbine %>%
+  mutate(commissioning_date = parse_number(commissioning_date)) %>%
+  mutate(commissioning_date = as.numeric(commissioning_date))%>%
+  ggplot(aes(x=commissioning_date))+
+  #geom_histogram(binwidth = 1,fill="cadetblue3",col="black")+
+  geom_bar(fill="cadetblue3",col="white")+
+  geom_text(stat="count", aes(label=..count.. ),vjust=-.5,size=3)+
+  theme_classic()+
+  theme(panel.grid.major = element_line(),
+        panel.grid.minor = element_line())+
+  labs(title="Despite A Large Number of Turbines Commissioned\nDuring The Early Part Of The 2010s,\nThere has Been A Sharp Decline Over Recent Years", subtitle="Number of Commissioned Wind Turbines by Year",x="Year",y="Number of Wind Turbines")+
+  scale_y_continuous(expand = c(0,0),limits = c(0,1200))
+```
+
+The data suggests wind turbines started coming into use by 1999/2000. The number commissioned gradually increased, until reaching a peak in 2014, where there has since been a decline.
+
+
+```{r}
+wind_turbine %>% 
+  mutate( model= fct_lump_n(model,n=10)) %>%
+  count(model,sort = TRUE) %>%
+  ggplot(aes(y=reorder(model,n),x=n ))+
+    geom_col(fill="cadetblue3")+
+  geom_text(aes(label=n),hjust=-.1)+
+  theme_classic()+
+  theme(panel.grid.major.x = element_line(),
+        panel.grid.minor.x = element_line(),
+        axis.ticks.y = element_blank())+
+  labs(title="Top 10 Most Common Wind Turbine Models",x="Number of Models",y="Model")+
+    scale_x_continuous(expand=c(0,0),limits = c(0,3000))
+  
+```
+
+We reduce the 92 model types in the dataset into the top 10 most common, categorising all those that appear outside into "Other".
+
+
+Let's see if there is any difference between the models total energy capacity
+
+
+
+```{r, out.width=5}
+
+counts =    wind_turbine %>% 
+   mutate( model= fct_lump_n(model,n=10)) %>%
+   count(model,sort = TRUE)    # Allows us to order factors by count
+
+wind_turbine %>%
+   mutate( model= fct_lump_n(model,n=10)) %>%
+  left_join(counts,by="model") %>% 
+  filter(!is.na(turbine_rated_capacity_k_w) ) %>%
+  ggplot(aes(x= fct_reorder(model,-n) ,y=turbine_rated_capacity_k_w))+
+  #geom_violin(fill="palegreen3",draw_quantiles = c(0.25,0.5,0.75) )+
+  geom_boxplot(fill="palegreen3")+ 
+   theme_classic()+
+  theme(panel.grid.major.y = element_line(),
+        panel.grid.minor.y = element_line())+
+  labs(title = "Differences of Rated Capacity of Turbines Between Models",subtitle="Models Ordered From Most To Least Common" , x="Model",y="Turbine Rated Capacity (KW)")
+```
+
+Let's look at the differences between regions
+
+```{r}
+counts =    wind_turbine %>% 
+   mutate( province_territory = fct_lump_n(province_territory ,n=8)) %>%
+   count(province_territory,sort = TRUE)
+
+wind_turbine %>%
+   mutate( province_territory= fct_lump_n(province_territory,n=8)) %>%
+  left_join(counts,by="province_territory") %>% 
+  filter(!is.na(turbine_rated_capacity_k_w) ) %>%
+  ggplot(aes(x= fct_reorder(province_territory,-n) ,y=turbine_rated_capacity_k_w))+
+  #geom_violin(fill="palegreen3",draw_quantiles = c(0.25,0.5,0.75) )+
+  geom_boxplot(fill="palegreen3")+ 
+   theme_classic()+
+  theme(panel.grid.major.x = element_line(),
+        panel.grid.minor.x = element_line())+
+  labs(title = "Differences of Rated Capacity of Turbines Between Regions",subtitle="Models Ordered From Most To Least Common" , x="Region",y="Turbine Rated Capacity (KW)")+
+  coord_flip()
+
+```
+
+We see some evidence of normally distributed values, but let's use another plot to visually confirm if this is truly the case.
+
+```{r}
+wind_turbine %>%
+   mutate( province_territory= fct_lump_n(province_territory,n=8)) %>%
+  left_join(counts,by="province_territory") %>% 
+  filter(!is.na(turbine_rated_capacity_k_w) ) %>%
+  ggplot(aes(y= fct_reorder(province_territory,-n) ,x= turbine_rated_capacity_k_w ,fill = stat(x) ))+
+  #geom_violin(fill="palegreen3",draw_quantiles = c(0.25,0.5,0.75) )+
+  #geom_boxplot(fill="palegreen3")+ 
+  geom_density_ridges(fill="palegreen3",rel_min_height = 0.01)+
+  #geom_density_ridges_gradient(rel_min_height = 0.01) +
+  #scale_fill_viridis_c( option = "D", begin = .2) +
+   theme_classic()+
+  theme(panel.grid.major.y = element_line(),
+        panel.grid.minor.y = element_line())+
+  labs(title = "Differences of Rated Capacity of Turbines Between Regions",subtitle="Models Ordered From Most To Least Common" , y="Region",x="Turbine Rated Capacity (kW)")
+```
+
+We see that there are various different modes for the regions, indicating that the it is not normally distributed.
+
+Also of note are the differences in the rated capacities of turbines for different regions, in particular we see that some regions are more likely to be associated with different ratings. For example, in New Brunswick, many of the turbines are rated at 3,000 kW, while in Saskatchewan, most of it's turbines are rated at just under 2000 kW. 
+
+
+```{r}
+wind_turbine %>%
+  filter(!is.na(turbine_rated_capacity_k_w) ) %>%
+    mutate(commissioning_date = parse_number(commissioning_date)) %>%
+  mutate(commissioning_date = as.numeric(commissioning_date))%>%
+  ggplot(aes(x=commissioning_date,y=turbine_rated_capacity_k_w)  )+
+  geom_jitter(height = 250,width=.5,alpha=0.25,col="palegreen3")+
+ # geom_bin2d()+
+   theme_classic()+
+  theme(panel.grid.major = element_line(),
+        panel.grid.minor = element_line())+
+ #scale_fill_viridis_c(option="B",begin=.2,end=.8)
+    labs(title = "Turbines Are Rated With Higher Capacities As Time Passes",x="Commisioning Date",y="Turbine Rated Capacity (kW)")
+```
+
+Newer turbines tend to have a higher turbine rated capacity.
+
+
+```{r}
+count1 = wind_turbine %>%
+  mutate(     province_territory = fct_lump_n(province_territory ,n=8))%>%
+  count(province_territory)
+
+count2 = wind_turbine %>%
+  mutate(     model = fct_lump_n(model ,n=8))%>%
+  count(model)
+```
+
+
+```{r}
+table = wind_turbine %>%
+  mutate(     province_territory = fct_lump_n(province_territory ,n=8),
+              model= fct_lump_n(model,n=10)) %>%
+ # count(province_territory,model) %>%
+  #pivot_wider(names_from = model, values_from=n) %>%
+  janitor::tabyl(province_territory,model)%>%
+  janitor::adorn_totals(c("row","col")) 
+
+total_cols =  table %>%
+  slice_tail()
+
+#table %>% anti_join(total_cols, by="province_territory") %>%
+#  arrange(-Total) %>% bind_rows(total_cols ) %>%
+#  select(province_territory,"GE 1.5SLE",,everything())
+
+  #bind_cols(count1 %>% select(n)  ) %>%
+  #bind_rows(count2 %>% pluck(2) )
+```
+
+```{r}
+  table %>%
+  knitr::kable()
+```
+
+We can see a breakdown of the turbines by model and region. The most common turbine by model and region, not including the "other" category,  is the SWT 2.3-101 model in Ontario, occurring 780 times.
+
+
+
+Look at the manufactures
+
+```{r}
+wind_turbine %>%
+  filter(!is.na(turbine_rated_capacity_k_w)) %>%
+  pivot_longer ( cols = c(rotor_diameter_m,hub_height_m)  ) %>%
+  ggplot(aes(y=turbine_rated_capacity_k_w,x=value))+
+  geom_point(col="palegreen3",size=4)+
+  facet_wrap(name~.,scales = "free")+
+  theme_bw()+
+  labs(title="Bigger Turbines Have A Higher Rating",x="Value (m)",y="Rated Capacity (kW)")
+```
+
+We clearly see that as the hub height for a turbine increase, and the blade diameter increases, then so does the turbine capacity.
+
+I will now clean up the data fully
+
+```{r}
+turbines =  wind_turbine  %>%
+  select( turbine_rated_capacity_k_w, rotor_diameter_m, hub_height_m, commissioning_date, province_territory,model )%>%
+  filter( !is.na(turbine_rated_capacity_k_w) ) %>%
+  transmute( capacity = turbine_rated_capacity_k_w/1000,  # convert from kw to mw 
+             rotor_diameter = rotor_diameter_m,
+             hub_height = hub_height_m,
+             year =  parse_number(commissioning_date),
+             year = as.numeric(year),
+             territory = fct_lump_n(province_territory,n=8),
+             model= fct_lump_n(model,n=10)
+  ) %>%
+  mutate( territory = fct_relevel(territory,"Other"),
+          model = fct_relevel(model,"Other") )
+
+
+
+slice_sample(turbines,n=10) %>%
+  knitr::kable(caption = "Random Sample of 10 rows of the newly created turbines dataset")
+```
+
+
+# Modelling
+
+Let's fit some models using tidy models
+
+```{r}
+
+set.seed(411)
+turbines_split =  initial_split(turbines,strata = capacity)
+
+train = training(turbines_split)
+test = testing(turbines_split)
+
+```
+
+
+
+
+Since we can see a linear relationship in our data, we will use a linear regression model, and a SVM model with a linear degree polynomial kernal.
+
+```{r}
+linear_rec = recipe( capacity ~ . , data = train ) %>%
+  step_dummy(all_nominal() ) %>%
+  step_zv(all_predictors())
+  
+
+svm_rec = recipe(capacity ~ ., data=train) %>%
+  step_dummy(all_nominal()) %>%
+  step_zv(all_predictors()) %>%
+  step_normalize(all_predictors())
+
+```
+
+
+```{r}
+lin_mod = linear_reg() %>%
+  set_engine("lm")
+  
+svm_mod = svm_poly(degree = 1, cost = tune(), scale_factor = tune()  ) %>%
+  set_engine("kernlab") %>%
+  set_mode("regression")
+
+lin_mod
+svm_mod
+```
+
+
+
+```{r}
+lin_wf = workflow() %>%
+  add_model(lin_mod)%>%
+  add_recipe(linear_rec)
+
+svm_wf = workflow() %>%
+  add_model( svm_mod) %>%
+  add_recipe( svm_rec )
+
+lin_wf
+svm_wf
+
+
+```
+
+## Linear Fit
+
+```{r}
+lin_fit = fit(lin_wf,data=train) 
+
+lin_coefs =  lin_fit %>% pull_workflow_fit() %>% tidy(conf.int =TRUE) 
+lin_coefs %>% 
+  knitr::kable(caption="Summary of Linear Regression Fit")
+```
+
+Graphically we have the following, 
+
+```{r}
+lin_coefs %>%
+  filter( term !="(Intercept)" ) %>% 
+  filter( !str_starts(term,"territory|model"  )  ) %>%
+ ggplot(aes(x=estimate,y=term))+
+   geom_point(size=3)+
+   geom_errorbar(aes(xmin=conf.low, xmax=conf.high),width=0.1)+
+  geom_vline(xintercept = 0,lty=2,col="firebrick3")+
+  theme_classic()+
+  theme(panel.grid.major = element_line(),
+        panel.grid.minor.x = element_line())+
+  labs(title ="Coefficient Estimates of:\n Year Commisioned, Rotor Diameter and Hub Height")
+```
+
+We see that, holding the assumption that all other variables are the same:
+
+* A unit increase in year (going forwards in time), is associated with an increase in the capacity of -0.005 mW 
+* A unit increase in the rotor diameter, is associated with an increase in capacity of 0.022 mW
+* A unit increase in the hub height, is associated with an increase in capacity of 0.01 mW
+
+Next we will see if there is a difference between the terrorities, from the base level of "Other"
+
+```{r}
+lin_coefs %>%
+  filter( term !="(Intercept)" ) %>% 
+  filter( str_starts(term,"territory"  )  ) %>%
+  mutate (   term  = str_remove_all(term,"territory_")) %>%
+ ggplot(aes(x=estimate,y=reorder(term,-estimate) ))+
+   geom_point(size=3)+
+   geom_errorbar(aes(xmin=conf.low, xmax=conf.high),width=0.2)+
+  geom_vline(xintercept = 0,lty=2,col="firebrick3")+
+  theme_classic()+
+  theme(panel.grid.major = element_line(),
+        panel.grid.minor.x = element_line())+
+  labs(title = "Coefficient Estimates For Territory",x="Coefficent Estimate",y="Territory")
+```
+
+We see that for all territories, excluding New Brunswick, they are associated with a decrease in capacity when compared to regions categorised into "Other", whereas New Brunswick has a higher capacity rating, than compared to "Other" territories.
+
+
+```{r}
+lin_coefs %>%
+  filter( term !="(Intercept)" ) %>% 
+  filter( str_starts(term,"model"  )  ) %>%
+  mutate (   term  = str_remove_all(term,"model_")) %>%
+ ggplot(aes(x=estimate,y=reorder(term,-estimate) ))+
+   geom_point(size=3)+
+   geom_errorbar(aes(xmin=conf.low, xmax=conf.high),width=0.2)+
+  geom_vline(xintercept = 0,lty=2,col="firebrick3")+
+  theme_classic()+
+  theme(panel.grid.major = element_line(),
+        panel.grid.minor.x = element_line())+
+  labs(title = "Coefficient Estimates For Turbine Model",x="Coefficent Estimate",y="Turbine Model")
+```
+
+We can immediately see that the models E.82 and MM82 are not statistically different from "Other" models. All other models, however, are associated with a decrease in rated capacity if all other variables are held the same.
+
+### Estimate Liner Regression Using Resampling
+
+We can get an estimate of the model performance using cross validation
+
+```{r}
+set.seed(411)
+train_folds =  vfold_cv(data=train,v = 10,strata = capacity)
+
+lin_train_res =
+ fit_resamples(
+  lin_wf,
+  resamples = train_folds,
+  control = control_resamples(save_pred = TRUE)
+  )
+
+lin_train_res %>%
+  collect_metrics() %>%
+  knitr::kable(caption="Performance with 10-fold CV")
+```
+
+We can also see how it performed on the 10 difference folds
+
+```{r}
+lin_train_res %>%
+  unnest(.metrics) %>%
+  ggplot(aes(x=.metric,y=.estimate))+
+  #geom_violin(aes(fill=.metric),alpha=0.2,show.legend = FALSE,draw_quantiles = c(.25,.5,.75) )+
+  geom_boxplot(aes(fill=.metric),alpha=0.2,show.legend = FALSE )+
+  #geom_jitter(aes(col=.metric),height = 0 , width = .1,size=4)+
+  geom_point(aes(col=.metric),size=4,show.legend = FALSE)+
+  facet_wrap(.~.metric,scales="free")+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())+
+  labs(title = "Estimated Linear Regression Performace Using Resampling", x = NULL,y="Estimate")
+```
+
+## SVM
+
+### Tuning Hyper Parameters
+
+Here we will tune the hyper parameters and try to obtain best ones that lead to the lowest rmse.
+
+```{r}
+
+start = Sys.time()
+
+set.seed(411)
+svm_res = svm_wf %>%
+  tune_grid(  resamples = train_folds , 
+              grid = grid_max_entropy(cost(),scale_factor(),size=12),
+              control = control_resamples(save_pred = TRUE)
+  )
+
+end = Sys.time()
+
+end - start
+```
+
+```{r}
+#svm_res  %>% collect_metrics() %>% 
+#  pivot_longer( cols = c(cost,scale_factor) ) %>%
+#  mutate( value = log(value)) %>%
+#  ggplot(aes(x=value,y=mean))+
+#  geom_point(aes(col=.config) )+
+#  facet_grid(name~.metric, scales = "free" )
+
+
+
+svm_res %>% autoplot( )
+```
+
+It seems that the higher the value of the scale factor, the better the model does. Not much can be said for the cost however.
+
+Below shows the best performing models in terms on rmse.
+
+```{r}
+svm_res %>% collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  arrange(mean) %>%
+  slice_head(n=5) %>%
+  knitr::kable()
+```
+
+
+```{r}
+svm_res %>%
+select_best("rmse") %>%
+  knitr::kable()
+```
+
+
+
+Let's use the best parameters
+
+```{r}
+final_svm = svm_wf %>% finalize_workflow( svm_res %>% select_best("rmse")  )
+
+final_svm
+```
+```{r}
+trained_svm = final_svm %>%
+ fit(data = train)
+```
+
+
+# Predict on Test Set
+
+```{r}
+lin_test_res =  test %>% bind_cols(
+predict(lin_fit,new_data = test)
+)%>%
+  metrics(truth = capacity , .pred) %>% 
+  filter(.metric !="mae") %>%
+  mutate(model = "Linear")
+
+svm_test_res = test %>% bind_cols(
+predict(trained_svm ,new_data = test)
+)%>%
+  metrics(truth = capacity , .pred) %>%
+    filter(.metric !="mae") %>%
+  mutate(model = "SVM")
+```
+
+
+```{r}
+lin_test_res %>% bind_rows(
+svm_test_res) %>%
+  select(-.estimator) %>%
+  pivot_wider(  names_from = .metric, values_from = .estimate ) %>%
+  knitr::kable(caption="Performance on Test Set")
+```
+
+We see that the linear regression Model did better in terms of RMSE and R$^2$.
+
+
+```{r, message='hide'}
+all_preds = test %>% bind_cols(
+  predict(lin_fit,new_data = test)
+) %>% bind_cols(
+predict(trained_svm ,new_data = test)  
+  ) %>%
+  rename( Linear = .pred...7, SVM = .pred...8  ) %>%
+  pivot_longer(cols = c(Linear,SVM), names_to="Model",values_to="Pred" )
+```
+
+
+```{r}
+all_preds %>%
+  ggplot(aes(x=capacity,y=Pred))+
+    geom_abline(slope=1,lty=2,col="grey70",size=1)+
+  geom_point(col="palegreen4",size=2,alpha=0.4)+
+  facet_wrap(.~Model)+
+  theme_bw()+  
+  theme(panel.grid.major = element_line(),
+        panel.grid.minor = element_line())+
+  labs(title="Final Performance on Test Set",x="True Capacity (mW)",y="Predicted Capacity (mW)")
+```
+
+We notice that the linear regression model, and the SVM performed almost the same, though we notice that they both had problems at the same points, namely at the 2.5 and 3 True Capacity points. We can investigate further
+
+Let's what caused these big residuals.
+
+## Residual Checking
+
+
+```{r}
+all_res = all_preds %>%
+  mutate( residual = (capacity - Pred)^2    ) %>%
+  arrange(-residual)
+```
+
+
+```{r}
+all_res %>%
+ # filter(Model == "SVM") %>%
+  ggplot(aes(x=residual,y=territory,)) +
+  geom_jitter(aes(col=territory),width=0.05,height=0.1,size=3, show.legend = FALSE,)+
+ # geom_boxplot(aes(fill=territory),alpha=0.4,show.legend = FALSE)+
+  theme_bw()+
+  facet_wrap(.~Model,nrow = 2)+
+  labs(title="Residual of Turbine Locations",x="Residual", y="Territory")
+
+```
+
+We see that the SVM model has some trouble with turbines from British Columbia, whereas
+
+```{r}
+all_res %>%
+ # filter(Model == "SVM") %>%
+  ggplot(aes(x=residual,y=model,)) +
+  geom_jitter(aes(col=model),width=0.05,height=0.1,size=3 ,show.legend = FALSE,)+
+ # geom_boxplot(aes(fill=territory),alpha=0.4,show.legend = FALSE)+
+  theme_bw()+
+  facet_wrap(.~Model,nrow = 2)+
+  labs(title="Residual of Turbine Models",x="Residual", y="Turbine Model")
+```
+
+It seems that "Other" models are causing issues for both regression models. This shouldn't be too surprising as we originally had 92 models, and then we binned the ones that were not in the top 10 most common, into "Other". This means that we could be missing some information that may allow us to better predict the high value residuals.  
+
+
+
+```{r}
+all_res %>%
+ # filter(Model == "SVM") %>%
+  ggplot(aes(x=residual,y=year,)) +
+  geom_jitter(width=0.05,height=0.1,size=3 ,alpha=0.1,show.legend = FALSE,)+
+ # geom_boxplot(aes(fill=territory),alpha=0.4,show.legend = FALSE)+
+  theme_bw()+
+  facet_wrap(.~Model,nrow = 2)+
+  labs(title="Residual of Year Commissioned",x="Residual", y="Year")
+```
+
+Both models seems to not perform that well during the year around 2010. This is 
+
+
+```{r}
+all_res %>%
+  ggplot(  aes(x=rotor_diameter,y=hub_height))+
+  geom_point(aes(col=residual)) +  
+  facet_wrap(.~Model)+
+  theme_bw()+  
+  theme(panel.grid.major = element_line(),
+        panel.grid.minor = element_line())+
+  scale_color_viridis_c(option="C",begin=1,end=0)+
+  labs(title="Residual of Turbine Physical Characteristics",x="Rotor Diameter (m)", y="Hub Height (m)")
+  
+```
+
+There appears to be no real pattern in increased residuals when looking at the physical traits of turbines themselves.  
+
+Let's see if there were any major changes of the phyiscal traits over the years.
+
+
+```{r}
+turbines %>% 
+  pivot_longer( cols=c(rotor_diameter,hub_height) ) %>%
+  ggplot(aes(x=year,y=value))+
+  geom_jitter(width=0.1,height=2,alpha=0.1)+
+  #geom_smooth(method="lm", col="red")+ # for predicting future lengths
+  facet_wrap(.~name)+
+  theme_bw()+  
+  theme(panel.grid.major = element_line(),
+        panel.grid.minor = element_line())+
+  labs(title="Turbines Are Becoming Ever Larger",x="Year", y= "Value (m)")
+```
+
+We observe a pretty strong trend; newer turbines tend to be bigger than older ones.
+
+
+```{r}
+turbines %>%
+  select( where(is.numeric) ) %>%
+  cor() %>%
+  corrplot::corrplot(type="upper", addCoef.col = "white")
+```
+
+The above figure shows the correlations between the numeric observations. We note that the year and rotor diameter are highly correlated. So removing either could improve model performance.
+
+# New Predictions
+
+Let's make see what the model predicts when we produce sensible fake data for the year of 2020 to 2025. We will focus on the regions of: Ontario, Quebec, and Alberta. And we will also focus on the model type "Other", since this has been the recent trend for those regions. We will also vary the sizes of the turbines.
+
+```{r}
+turbines %>%
+  filter(territory %in% c("Ontario","Quebec","Alberta") )%>%
+  group_by(year) %>%
+  count(model,territory) %>%
+  ggplot(aes(x=year,y=n,col=model))+
+  geom_point(size=5)+
+  geom_line(size=2)+
+  facet_wrap(.~territory,nrow=3)+
+  theme_bw()+  
+  theme(panel.grid.major = element_line(),
+        panel.grid.minor = element_line())+
+  labs(title= "Trend of Turbine Model Used in Alberta, Ontario, and Quebec",x="Year",y="Count")
+```
+
+Using a linear model to predict the turbine characteristics, soley using year as the variable.
+
+
+```{r}
+phys_pred <-
+  function(var) {
+    # Helper Function to get the estimated physical dimensions
+    predict(lm(var ~ year ,  data = turbines) , newdata =  data.frame(year =
+                                                                        seq(2020, 2025, 1))) %>%
+      as_tibble() %>%
+      bind_cols(year = seq(2020, 2025, 1))
+    
+    
+  }
+
+
+physical_preds =  phys_pred(turbines$rotor_diameter) %>%
+  rename(rotor_diameter = value) %>%
+  select(-year)   %>%
+  bind_cols(phys_pred (turbines$hub_height) %>%
+              rename(hub_height = value))
+
+
+
+fake_data = crossing(
+  year = (2020:2025),
+  territory = c("Ontario", "Quebec", "Alberta"),
+  model = "Other"
+) %>%
+  left_join(physical_preds, by = "year")
+
+fake_data %>%
+  knitr::kable(caption="Fake Data")
+```
+
+Now we shall create predictions using the linear regression model, and also obtain the prediction intervals
+
+```{r}
+lin_fake = fake_data %>% bind_cols(
+  predict(lin_fit, new_data = fake_data, type = "pred_int"),
+ predict(lin_fit, new_data = fake_data )  ) 
+```
+
+
+```{r}
+
+ggplot(lin_fake, aes(year, .pred, col = territory)) +
+  geom_ribbon(
+    aes(ymin = .pred_lower, ymax = .pred_upper, fill = territory),
+    alpha = 0.1,
+    lty = 2
+  ) +
+  geom_point(size = 3) +
+  geom_text(aes(label= round(.pred,2) ),vjust=-.5,size=4,col="black")+
+  geom_line(aes(group = 1), size = 1.4) +
+  facet_wrap(. ~ territory, nrow = 3) +
+  labs(
+    title = "Alberta, Ontario, and Quebec Can Expect To See\nHigher Rated Turbine Capacity In The Near Future",
+    subtitle = 'Predicted Future Rated Capacity for Model Type: "Other" ',
+    x = "Year",
+    y = "Predicted Capacity (mW)"
+  ) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+
+```
+
+This is based on the assumption that the physical dimensions of turbines will continue to increase linearly over time. The predictions tells us that a turbine in the region of Quebec, will be higher rated than ones in Alberta or Ontario. 
+
