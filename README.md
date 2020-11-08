@@ -1,6 +1,6 @@
  # Tidy Tuesday
  
- This repo is about exploring the datasets from the R for Data Science Community Project: Tidy Tuesday. This can be anything from data visulizations to using machine learning models. 
+ This repo is about exploring the datasets from the R for Data Science Community Project: Tidy Tuesday. This is an online community project where every Tuesday a raw dataset is posted, and member of the community are asked to explore the data; this can be anything from data visulizations to using machine learning models. 
  
  You can learn more about Tidy Tuesday here: https://github.com/rfordatascience/tidytuesday
  
