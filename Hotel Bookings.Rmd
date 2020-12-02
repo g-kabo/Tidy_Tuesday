@@ -1,5 +1,5 @@
 ---
-title: "Hotels"
+title: "Tidy Tuesday Rewind: Hotels"
 date: "11/11/2020"
 output:
   html_document:
@@ -8,16 +8,12 @@ output:
     number_sections: true
 ---
 
+
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
-
-TO DO:
-
-Explain all plots 
-then finish
 
 ```{r, message=FALSE}
 library(tidyverse)
@@ -274,7 +270,7 @@ hotels %>%
 ```
 
 
-The number of nights stayed are similar for both hotels.
+The distribtuion of number of nights stayed are similar for both hotels.
 
 ```{r}
 hotels %>%
