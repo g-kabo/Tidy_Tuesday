@@ -59,7 +59,7 @@ meteors %>%
 
 We notice that there have been many sightings of fallen meteorites in recent centuries, and we see that that there has been a gradual uptick in the number discovered up until the 1940s. This could be due to more people being able to watch the skies or better access to technology as time passes. 
 
-Though in the past 50 years there as hasn't been as many detections, which can across as odd, since due to modern and sophisticated technology, surely we would be able to detect more meteorites? The answer could lie in the fact that meteorites are just really rare events.
+Though in the past 50 years there hasn't been as many detections, which can come across as odd, since due to modern and sophisticated technology, surely we would be able to detect more meteorites? The answer could lie in the fact that meteorites are just really rare events.
 
 
 Let's look at the mass distribution of meteorites

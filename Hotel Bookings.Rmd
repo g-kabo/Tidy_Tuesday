@@ -1,0 +1,875 @@
+---
+title: "Hotels"
+date: "11/11/2020"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+TO DO:
+
+Explain all plots 
+then finish
+
+```{r, message=FALSE}
+library(tidyverse)
+```
+
+
+```{r,message=FALSE}
+
+hotels_raw <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-02-11/hotels.csv')
+
+
+```
+
+
+
+From the [source](https://www.sciencedirect.com/science/article/pii/S2352340918315191#f0010) of the dataset, there are actually two different distributions at play here. The data collected of non-cancelled bookings is different than the data collected from cancelled bookings. Thus we will only consider the non-cancelled data,  which has much more accurate customer information.
+
+
+
+
+```{r}
+hotels = hotels_raw %>%
+  filter(is_canceled == 0) %>%
+  na.omit()
+```
+
+```{r}
+skimr::skim(hotels)
+```
+
+#EDA
+
+
+```{r}
+hotels %>%
+  count(hotel)
+```
+
+We have around twice the amount of people staying in City as we do in Resort.
+
+# Number of bookings per month
+
+Let's look at the date range of our data
+
+```{r}
+hotels %>%
+  group_by(arrival_date_year)%>%
+  count(arrival_date_week_number)%>%
+  ggplot(aes(x=arrival_date_week_number,y=n,group=factor(arrival_date_year) ,col=factor(arrival_date_year) ))+
+  geom_point()+
+  geom_line(size=1)+
+  theme_bw()+
+  labs(title="Number of Bookings by Week of Year",x="Arrival Week",y="Number of Bookings",col="Year")+
+  scale_color_manual(values=c("#C8E6C9", "#66BB6A", "#1B5E20"))
+```
+
+This plot shows the total number of books by week of year, usually there are around 500-800 books per week.
+
+
+```{r}
+hotels %>%
+#  select(arrival_date_year,arrival_date_month,arrival_date_day_of_month )  %>%
+     mutate(arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year)),
+           # date = lubridate::make_datetime(arrival_date) 
+           ) %>%
+  group_by(hotel)%>%
+  count(arrival_date)%>%
+  ggplot(aes(x=arrival_date,y=n,group=hotel,col=hotel))+
+  #geom_point()+
+  geom_line()+
+  theme_minimal()+
+  theme(legend.position = "top")+
+  scale_x_date(date_labels = "%B\n%Y" )+
+  #geom_hline(yintercept = 35,col="black",size=2,lty=2)+
+  labs(title="Number of Hotel Bookings Between July 2015 to August 2017\nFor City and Resort Hotel",x="Date",y="Number of Bookings",col="Hotel")
+```
+
+Here we see the number of daily books by date and hotel;. We can see that the resort hotel has a relatively stable number of bookings. The average number of daily bookings for resort hotel is 35. The average for city is less consistent, but the average is about 60 bookings per day.
+
+
+
+```{r, warning=FALSE}
+hotels %>%
+#  select(arrival_date_year,arrival_date_month,arrival_date_day_of_month )  %>%
+     mutate(arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year)),
+           # date = lubridate::make_datetime(arrival_date) 
+           ) %>%
+  group_by(hotel)%>%
+  count(arrival_date)%>%
+  mutate( rolling_avg = zoo::rollmean(n,k=7,fill=NA,align="right") ) %>% 
+  ggplot(aes(x=arrival_date,y=rolling_avg,group=hotel,col=hotel))+
+  #geom_point()+
+  geom_line()+
+  theme_minimal()+
+  theme(legend.position = "top")+
+  scale_x_date(date_labels = "%B\n%Y" )+
+  #geom_hline(yintercept = 35,col="black",size=2,lty=2)+
+  labs(title="7 Day Rolling Average of Hotel Bookings Between July 2015 to August 2017 For City and Resort Hotel",x="Date",y="Number of Bookings",col="Hotel")
+```
+
+# Room Average Daily Rate and Room Stay
+
+What has been the Average Daily Rate?
+
+```{r, warning=FALSE}
+hotels %>%
+#  select(arrival_date_year,arrival_date_month,arrival_date_day_of_month )  %>%
+     mutate(arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year)),
+           # date = lubridate::make_datetime(arrival_date) 
+           ) %>%
+group_by(arrival_date)%>%
+  summarise(Daily_ADR = mean(adr),.groups="drop")%>%
+  mutate(rolling_adr =  zoo::rollmean(Daily_ADR,k=7,fill=NA)  ) %>%
+  pivot_longer(cols= c(Daily_ADR,rolling_adr) ) %>% 
+  ggplot(aes(x=arrival_date,y=value,group=name,col=name))+
+  geom_line()+
+  scale_color_manual(values=c("#99ffbb", "#008000"),labels=c("Daily Value","7 Day Rolling Average") )+
+  scale_x_date(date_labels = "%B\n%Y" , date_breaks = "4 month" , date_minor_breaks = "2 month" )+
+  scale_y_continuous(labels = scales::label_dollar())+
+  theme_minimal()+
+  theme(legend.position = "top")+
+  labs(title="Average Daily Rate for all Hotels",x="Arrival Date",y="Average Daily Rate",col=NULL)
+  
+```
+
+We can see that there is a clear spike in the average daily rate around the month of Augest, similarly, we see a small, yet significant spike at the tail end of December. This should not be surprising since the former spike corresponds to the summer vacation, while the later corresponds to the winter festive season. Also of note is that there appears to be a positive trend, we can see this directly from the peaks taking a larger value as time passes.
+
+```{r, warning=FALSE}
+hotels %>%
+#  select(arrival_date_year,arrival_date_month,arrival_date_day_of_month )  %>%
+     mutate(arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year)),
+           # date = lubridate::make_datetime(arrival_date) 
+           ) %>%
+group_by(arrival_date,hotel)%>%
+  summarise(Daily_ADR = mean(adr),.groups="keep")%>%
+  ungroup(arrival_date)%>%
+  mutate(rolling_adr =  zoo::rollmean(Daily_ADR,k=7,fill=NA,align="right")  ) %>%
+ # pivot_longer(cols= c(Daily_ADR,rolling_adr) ) %>% 
+  ggplot()+
+  geom_col(aes(x=arrival_date,y=Daily_ADR,fill=hotel),alpha=0.2 )+
+  geom_line(aes(x=arrival_date,y=rolling_adr,col=hotel),size=1)+
+  #scale_color_manual(values=c("grey80", "red"))+
+  facet_wrap(.~hotel,nrow=2)+
+  #annotate( geom="text",x=as.Date(1,origin ="2017-01-01"),y=100,label="7 Day Rolling Average",col="Blue",size=5)+
+  geom_text(data = . %>% filter(hotel=="City Hotel"), aes(x=as.Date(1,origin ="2016-02-01"),y=150,label="7 Day Rolling Average"),col="#F8766D",size=4,fontface="bold")+
+  scale_x_date(date_labels = "%b\n%Y" , date_breaks = "2 month" , date_minor_breaks = "1 month" )+
+  scale_y_continuous(labels = scales::label_dollar())+
+  theme_bw()+
+  theme(legend.position = "none")+
+  labs(title = "Average daily rate for City and Resort Hotels with 7 day moving average",x="Arrival Date",y="Average Daily Rate")
+```
+
+We can further decompose the ADR by hotel, for City Hotel we can observe that there is a slight positive trend and we can see peaks around January. For Resort hotel, we can clearly observe a seasonal pattern. There is a big peak in August and a smaller peak in January. Interestingly, the peaks for Resort Hotel in August appear to be increasing.
+
+
+```{r, warning=FALSE}
+hotels %>%
+#  select(arrival_date_year,arrival_date_month,arrival_date_day_of_month )  %>%
+     mutate(arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year)),
+           # date = lubridate::make_datetime(arrival_date) 
+           ) %>%
+group_by(arrival_date,hotel)%>%
+  summarise(Daily_ADR = mean(adr),.groups="keep")%>%
+  ungroup(arrival_date)%>%
+  mutate(rolling_adr =  zoo::rollmean(Daily_ADR,k=7,fill=NA,align="right")  ) %>%
+ # pivot_longer(cols= c(Daily_ADR,rolling_adr) ) %>% 
+  ggplot(aes(x=arrival_date,y=rolling_adr,col=hotel,group=hotel))+
+  geom_line(size=1)+
+  #scale_color_manual(values=c("grey80", "red"))+
+  #facet_wrap(.~hotel,nrow=2)+
+  scale_x_date(date_labels = "%b\n%Y" , date_breaks = "2 month" , date_minor_breaks = "1 month" )+
+  scale_y_continuous(labels = scales::label_dollar())+
+  #geom_smooth(method="lm",lty=2)+
+  theme_bw()+
+  theme(legend.position = "top")+
+  labs(title = "7 Day Moving Average Rates for City and Resort Hotels",x="Arrival Date",y="Average Daily Rate",col="Hotel")
+```
+
+We now overlay the rolling averages, and we see that during the months of July to September, the ADR for resort hotel is higher than city hotel, whereas during the rest of the year the ADR for city hotel is higher than resort hotel.
+
+Let's look at the weekday breakdown
+
+```{r, warning=FALSE}
+hotels %>%
+#  select(arrival_date_year,arrival_date_month,arrival_date_day_of_month )  %>%
+     mutate(arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year)),
+            day_of_week = lubridate::wday(arrival_date,label=TRUE,week_start=1) ,
+            quarter = lubridate::quarter(arrival_date,fiscal_start = 3),
+            season = factor(quarter, labels = c("Spring","Summer","Autumn","Winter"))
+           ) %>%
+  group_by(hotel,day_of_week)%>%
+  ggplot(aes(x=day_of_week,y=adr ))+
+  #geom_violin(aes(fill=day_of_week) , draw_quantiles = c(.25,.5,.75))+
+  #geom_violin(aes(fill=day_of_week))+ 
+  geom_boxplot()+
+  facet_grid(hotel~season,scales="free_y")+
+  labs(title="ADR by Day of Season and Hotel",x="Day of Week",y="ADR")+
+  theme_bw()+
+  theme(legend.position="none")
+```
+
+We can see that the that the rates during Summer for Resort Hotels are much higher.
+
+
+
+```{r, fig.width=9}
+hotels %>%
+  mutate( arrival_date_month = factor(arrival_date_month, levels =  month.name)  ) %>% 
+  group_by(hotel,arrival_date_month,arrival_date_year)%>%
+  count() %>% 
+  ungroup(arrival_date_year) %>%
+  summarise(mean_bookings  = mean(n)  ,.groups="drop") %>% 
+#pivot_wider(names_from=arrival_date_month,values_from = mean_bookings)
+  ggplot(aes(x=arrival_date_month,y=mean_bookings,group=hotel,col=hotel))+
+  geom_line(size=1.5)+
+  geom_point(size=5)+
+  theme_minimal()+
+  theme(legend.position = "top")+
+  labs(title="Average Number of Bookings by Arrival Month",x="Month",y="Number of Bookings",col="Hotel")
+```
+
+
+This above graph shows how, on average, the number of bookings per month is higher in city hotel than resort hotel
+
+
+
+
+```{r}
+hotels %>%
+  select(adults,children,babies,stays_in_week_nights,stays_in_weekend_nights,hotel,adr) %>%
+  ggplot()+
+  geom_histogram(aes(x=adr,fill=hotel),binwidth = 5,col="white")+
+  facet_wrap(.~hotel,nrow=2,scales = "free")+
+  theme_bw()+
+  theme(legend.position = "none")+
+  scale_x_continuous(labels = scales::label_dollar())+
+  labs(title = "Distribution of ADR by Hotel",x="ADR",y="Count")
+```
+
+We see that the average adr for city hotel is higher than the ADR for resort
+
+Let's find out out long customers typically stayed for
+
+
+```{r}
+hotels %>%
+  mutate( total_stay = stays_in_week_nights + stays_in_week_nights) %>%
+  ggplot()+
+  geom_histogram(aes(x=total_stay,fill=hotel),binwidth=2,col="white")+
+  facet_wrap(.~hotel,nrow=2,scales="free")+
+  theme_bw()+
+  theme(legend.position = "none")+
+  labs(title = "Histogram of Total Night Stayed at Hotel",x="Nights Stayed",y="Count")
+```
+
+
+The number of nights stayed are similar for both hotels.
+
+```{r}
+hotels %>%
+  mutate( total_stay = stays_in_week_nights + stays_in_week_nights, 
+        arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year) )
+        ) %>% 
+  group_by(hotel,arrival_date)%>%
+  summarise(Avg_stay = mean(total_stay),.groups="drop" ) %>%
+  ggplot()+
+  geom_line(aes(x=arrival_date,y=Avg_stay,col=hotel))+
+  facet_wrap(.~hotel,nrow=2)+
+  scale_x_date(date_labels = "%b\n%Y" , date_breaks = "2 month" , date_minor_breaks = "1 month" )+
+  theme_bw()+
+  theme(legend.position = "none")+
+  labs(title="Average nights stayed by date and hotel",x="Arrival Date",y="Nights Stayed")
+          
+```
+
+We clearly see that the number of nights stayed at the City Hotel is about 5 days, while the number of nights stayed at the resort hotel depends on the time of year. For example, during the months of January to March, there is a typical dip in the stay length, of around three to four months,  but during the summer months, most notably, July to September, there is an increase to around eight to nine nights stayed.
+
+
+
+
+
+```{r,warning=FALSE}
+hotels %>%
+  mutate( total_stay = stays_in_week_nights + stays_in_week_nights, 
+        arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year) )
+        ) %>% 
+  group_by(hotel,arrival_date)%>%
+  summarise(Avg_stay = mean(total_stay),.groups="drop" ) %>%
+  group_by(hotel) %>% 
+  mutate(rolling_avg = zoo::rollmean(Avg_stay,k=7,fill=NA,align="right") ) %>% 
+  ggplot()+
+  geom_line(aes(x=arrival_date,y=rolling_avg,col=hotel,group=hotel))+
+ # facet_wrap(.~hotel,nrow=2)+
+  scale_x_date(date_labels = "%b\n%Y" , date_breaks = "2 month" , date_minor_breaks = "1 month" )+
+  theme_bw()+
+  theme(legend.position = "top")+
+  labs(title="Average nights stayed by date and hotel",x="Arrival Date",y="Nights Stayed",col="Hotel")
+```
+
+We overlay to two graphs over each other. We see that outside the month of November to March, generally speaking, people spend more nights in the resort hotel than city hotel. In the months mentioned, the two hotels have similar lengths of stay.
+
+
+
+```{r}
+hotels %>%
+  mutate( total_stay = stays_in_week_nights + stays_in_week_nights, 
+        arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year) ),
+        days_stayed =  reservation_status_date - arrival_date 
+        ) %>% 
+  slice_sample(n=5)# %>% 
+  #arrange(days_stayed)
+```
+
+
+```{r}
+arr  <- hotels %>%  
+  mutate( arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year))
+          ) %>%
+  group_by(arrival_date,hotel)%>%
+  summarise(Arriving_Adults = sum(adults), .groups="drop" )
+
+
+dep <- hotels %>%  
+  group_by(reservation_status_date,hotel)%>%
+  summarise(Departing_Adults = sum(adults), .groups="drop" )
+
+
+dep_and_arr <-  arr %>% 
+  full_join(dep,by=c("hotel","arrival_date"="reservation_status_date")) %>% 
+filter( arrival_date <= "2017-08-31" ) # Study stopped collecting arrivals after this date
+
+dep_and_arr  <- dep_and_arr  %>%
+  mutate( Arriving_Adults = replace_na(Arriving_Adults,0),
+          Departing_Adults= replace_na(Departing_Adults,0))
+
+dep_and_arr %>% 
+  group_by(hotel) %>% 
+    mutate(change = Arriving_Adults - Departing_Adults,
+         cumu_change = as.numeric(cumsum(change) )
+    ) %>%
+  ggplot()+
+  geom_line(aes(x=arrival_date,y=cumu_change,col=hotel))+
+  facet_wrap(.~hotel,nrow=2,scales = "free")+
+  scale_x_date(date_labels = "%b\n%Y" , date_breaks = "2 month" , date_minor_breaks = "1 month" )+
+  theme_bw()+
+  theme(legend.position = "none")+
+  labs(title="Number of adults staying at hotel from start of study",x="Date",y="Change in number of adults",subtitle = "Defined up to the initial number of customers at hotel")
+
+```
+
+This graph depicts the the change in the number of adults staying at the hotel. This is defined up to some constant since we don't know the initial or the final number of adults staying at the hotel. We use the formula $\text{Inital State} + \Delta\text{State} = \text{Final State}$
+
+Next question to ask How much revenue was generated by time.
+
+
+
+```{r}
+hotels %>%
+    mutate(total_stay = stays_in_week_nights + stays_in_week_nights) %>% 
+  group_by(hotel,reservation_status_date)%>%
+  summarise(total =  sum(adr*total_stay ), .groups="drop") %>%
+  ungroup()%>%
+  ggplot()+
+   geom_line(aes(x=reservation_status_date,y=total,col=hotel))+ 
+  facet_wrap(.~hotel,nrow=2,scales = "free")+
+  scale_x_date(date_labels = "%b\n%Y" , date_breaks = "2 month" , date_minor_breaks = "1 month" )+
+  scale_y_continuous(labels=scales::dollar_format())+
+  theme_bw()+
+  theme(legend.position = "none")+
+  labs(title="Revenue from entire duration of stay by hotel",x="Check-out date",y="Revenue")
+
+```
+
+By multiplying the adr by the number of nights stayed, we can estimate how much a customer spent in total by check-out. We see some variability over the cause of the years, but we observe some noticeable spikes, such as during the final days of December. Interestingly enough there appears to be reduce variability about the late December spike, this could be due to the pent-up demand that was released. 
+
+Another odd thing to notice is a huge spike in June 2016 for City Hotel, there was an unprecedented spike in the amount of revenue gained. This represents a near 5x increase over the mean revenue during the entire study fore City Hotel.
+
+```{r}
+hotels %>%
+  filter(hotel=="City Hotel",
+         reservation_status_date <= "2016-08-21" & reservation_status_date >= "2016-03-07") %>% 
+    mutate(total_stay = stays_in_week_nights + stays_in_week_nights) %>% 
+  group_by(reservation_status_date)%>%
+  summarise(total =  sum(adr*total_stay ), .groups="drop")%>%
+  ungroup() %>%
+  ggplot()+
+  geom_line(aes(x=reservation_status_date,y=total),col="#F8766D",size=1.5)+
+  scale_x_date(date_labels = "%d %b\n%Y" , date_breaks = "2 weeks" , date_minor_breaks = "1 week" )+
+  scale_y_continuous(labels=scales::dollar_format())+
+   theme_bw()+
+  labs(title="The huge revenue spike for City Hotel on 29th May 2016",x="Check-out Date",y="Revenue")
+```
+
+Let's try to find why this has happened
+
+```{r}
+hotels %>%
+  filter(hotel=="City Hotel",
+         reservation_status_date <= "2016-06-7" & reservation_status_date >= "2016-05-20"
+  ) %>% 
+  group_by(reservation_status_date) %>% 
+  count(reservation_status_date) %>%
+  ggplot()+
+  geom_line(aes(x=reservation_status_date,y=n),col="#F8766D",size=2)+
+  scale_x_date(date_labels = "%d %b\n%Y" , date_breaks = "2 days" , date_minor_breaks = "1 day" )+
+  theme_bw()+
+  labs(title="Number of Check-outs in May 2016 from City hotel",x="Check-out Date", y="Number of recorded check-outs")
+```
+
+The only solution I can come up with is there may have been an issue with internal data collection, or it the fact it was memeorial day, which happened to have occurred on 30th May for 2016. I find  the latter cause to be unlikely, due to the fact that we should have observed similar spikes on memorial day for the other years, yet we do not see such spikes.
+
+
+We can view the average ADR by day of week too.
+
+```{r}
+hotels %>%
+  mutate(day_of_week = lubridate::wday(reservation_status_date,label=TRUE,week_start=1)   ) %>%
+  group_by(hotel,day_of_week) %>% 
+  summarise(mean_adr = mean(adr),.groups="drop")%>%
+  pivot_wider(names_from = "day_of_week", values_from="mean_adr")%>%
+  knitr::kable(caption="Average ADR by hotel and day of week")
+```
+
+
+# Country of Origin
+
+Let's switch gears to look at the country of origin of hotel guests
+
+
+I will make an assumption that the country "CN" is "CAN"
+
+```{r}
+countries <- hotels$country %>% 
+  unique
+
+countries <- countries %>% str_replace(.,"CN","CAN")
+
+country_table = bind_cols(full_name = countrycode::countrycode(countries, origin = 'iso3c', destination = 'country.name') ,short_name= countries)
+```
+
+
+```{r}
+hotels %>%
+  filter(!country  %in% c("NULL","TEMP") ) %>% 
+  mutate(country =str_replace(country,"CN","CAN"),
+         country = fct_lump_n(country,n=20)
+         )%>%
+  count(country) %>%
+  left_join(country_table,by=c("country"="short_name"))%>%
+  mutate(full_name = replace_na(full_name,"Other")  ) %>% 
+  ggplot(aes(x=n,y=reorder(full_name,n) ))+
+  geom_col(fill="#087719")+
+  geom_text(aes(label=  format(n, big.mark = ",", scientific = FALSE)) ,hjust=0.01)+
+  theme_classic()+
+  theme(panel.grid.major.x = element_line(),
+        panel.grid.minor.x = element_line(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank()
+        )+
+  scale_x_continuous(labels=scales::comma_format() , expand = c(0,0) ,limits = c(0,24000) )+
+  labs(title="Top 20 Most Common Countries of Origin",x="Number of Visitors",y="Home Country")
+
+
+```
+
+Here we see that the most common visitor countries of origin are: Portugal, followed by the United Kingdom, and then France, Spain, and Germany follow. This shows that it is very likely that the hotels are located in Portugal since it is the most common country of origin by a large margin. We also have many European visitors suggesting it is near the European mainland.
+
+
+
+```{r}
+hotels %>%
+  group_by(hotel) %>% 
+  filter(!country  %in% c("NULL","TEMP") ) %>% 
+  mutate(country =str_replace(country,"CN","CAN"),
+         country = fct_lump_n(country,n=10)
+         )%>%
+  count(country) %>%
+  left_join(country_table,by=c("country"="short_name"))%>%
+  mutate(full_name = replace_na(full_name,"Other")  ) %>% 
+  ggplot(aes(x=n, y = tidytext::reorder_within(full_name,n,hotel) ))+
+  geom_col(aes(fill=hotel))+
+  geom_text(aes(label=  format(n, big.mark = ",", scientific = FALSE)) ,hjust=0.01)+
+  tidytext::scale_y_reordered()+
+  facet_wrap(.~hotel, scales = "free")+
+  theme_minimal()+
+  theme(panel.grid.major.x = element_line(),
+        panel.grid.minor.x = element_line(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "none",
+        strip.background = element_rect(colour = "black", fill = "grey90")
+        )+
+  scale_x_continuous(labels=scales::comma_format() , expand = c(0,0) ,limits = c(0,14000) )+
+  labs(title="Top 20 most common countries of origin by hotel",x="Number of Visitors",y="Home Country")
+```
+
+
+
+```{r, fig.width=12}
+hotels %>%
+  filter(!country  %in% c("NULL","TEMP") ,
+         hotel == "City Hotel") %>% 
+  mutate(country =str_replace(country,"CN","CAN"),
+    #    arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year))
+     arrival_date_month = factor(arrival_date_month, levels = month.name) 
+         )%>%
+  group_by(arrival_date_month ) %>% 
+  count(country,sort = TRUE) %>%
+  left_join(country_table,by=c("country"="short_name"))%>%
+  mutate(full_name = replace_na(full_name,"Other")  ) %>%
+  slice_max(n,n=5) %>%
+  ggplot(aes(x=n,y= tidytext::reorder_within(full_name,n,arrival_date_month) ))+
+  geom_col(aes(fill=arrival_date_month))+
+  geom_text(aes(label=n),hjust=-.1,size=3)+
+  tidytext::scale_y_reordered()+
+  facet_wrap(.~arrival_date_month,scales = "free_y")+
+  theme_minimal()+
+    theme(panel.grid.major.y = element_blank(),
+      #    panel.grid.major.x = element_blank(),
+          panel.grid.minor.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        #axis.text.x = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "none",
+        strip.background = element_rect(colour = "black", fill = "grey90")
+        )+
+    scale_x_continuous(labels=scales::comma_format() , expand = c(0,0) ,limits = c(0,1400) )+
+  labs(title="Top 5 most common booking country of origin by month for City Hotel",x="Number of bookings", y="")
+```
+
+
+
+```{r, fig.width=12}
+hotels %>%
+  filter(!country  %in% c("NULL","TEMP") ,
+         hotel == "Resort Hotel") %>% 
+  mutate(country =str_replace(country,"CN","CAN"),
+    #    arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year))
+     arrival_date_month = factor(arrival_date_month, levels = month.name) 
+         )%>%
+  group_by(arrival_date_month ) %>% 
+  count(country,sort = TRUE) %>%
+  left_join(country_table,by=c("country"="short_name"))%>%
+  mutate(full_name = replace_na(full_name,"Other")  ) %>%
+  slice_max(n,n=5) %>%
+  ggplot(aes(x=n,y= tidytext::reorder_within(full_name,n,arrival_date_month) ))+
+  geom_col(aes(fill=arrival_date_month))+
+  geom_text(aes(label=n),hjust=-.1,size=3)+
+  tidytext::scale_y_reordered()+
+  facet_wrap(.~arrival_date_month,scales = "free_y")+
+  theme_minimal()+
+    theme(panel.grid.major.y = element_blank(),
+      #    panel.grid.major.x = element_blank(),
+          panel.grid.minor.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        #axis.text.x = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "none",
+        strip.background = element_rect(colour = "black", fill = "grey90")
+        )+
+    scale_x_continuous(labels=scales::comma_format() , expand = c(0,0) ,limits = c(0,1600) )+
+  labs(title="Top 5 most common booking country of origin by month for Resort Hotel",x="Number of bookings", y="")
+```
+
+```{r}
+all_hotels_top = hotels %>%
+  filter(!country  %in% c("NULL","TEMP") ) %>% 
+  mutate(country =str_replace(country,"CN","CAN"),
+   #      country = fct_lump_n(country,n=20)
+         )%>%
+  count(country,sort=TRUE) %>%
+  left_join(country_table,by=c("country"="short_name"))%>%
+  mutate(full_name = replace_na(full_name,"Other")  ) %>%
+  slice_head(n=5)%>%
+  pluck("full_name")
+
+#all_hotels_top 
+```
+
+```{r}
+hotels %>%
+  filter(!country  %in% c("NULL","TEMP") ) %>% 
+  mutate(country =str_replace(country,"CN","CAN"),
+    #    arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year))
+     arrival_date_month = factor(arrival_date_month, levels = month.name)
+         )%>%
+  group_by(arrival_date_month,arrival_date_year ) %>% 
+  count(country,sort = TRUE) %>%
+  ungroup() %>%
+  group_by(country,arrival_date_month) %>% 
+    summarise(mean_num = mean(n), .groups = "drop"  ) %>% 
+  left_join(country_table,by=c("country"="short_name"))%>%
+  mutate(full_name = replace_na(full_name,"Other"),
+         mean_num = round(mean_num)) %>%
+  mutate(full_name = fct_reorder(full_name, mean_num, tail, n = 1, .desc = TRUE)) %>%
+  mutate(  arrival_date_month   = factor(month.abb[arrival_date_month],levels=month.abb) ) %>% 
+  ggplot()+
+  geom_line( data= .%>%  filter(full_name %in% all_hotels_top  ) ,
+             aes(x=arrival_date_month,y=mean_num,group=full_name,col=full_name),
+             size=1.2)+
+  geom_line( data= .%>%  filter(!full_name %in% all_hotels_top  ) ,
+             aes(x=arrival_date_month,y=mean_num,group=full_name),
+             alpha=0.2)+
+  theme_minimal()+
+  labs(title="Mean number of origin of country bookings for all hotels",x=NULL,y="Number of bookings",col="Country")
+  
+```
+
+People from Portugal were the most common group. Then we see the other countries following behind, where the second most common country of origin depends on the month. For example, the months from April to July and September to October, British people were second most common. Spanish people were the most common in August and December. French were the most common in November.
+
+
+```{r}
+
+# Old Version of City of Hotel
+
+# hotels %>%
+#   filter(!country  %in% c("NULL","TEMP"),
+#          hotel=="City Hotel") %>% 
+#   mutate(country =str_replace(country,"CN","CAN"),
+#     #    arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year))
+#      arrival_date_month = factor(arrival_date_month, levels = month.name)
+#          )%>%
+#   group_by(arrival_date_month,arrival_date_year ) %>% 
+#   count(country,sort = TRUE) %>%
+#   ungroup() %>%
+#   group_by(country,arrival_date_month) %>% 
+#     summarise(mean_num = mean(n), .groups = "drop"  ) %>% 
+#   left_join(country_table,by=c("country"="short_name"))%>%
+#   mutate(full_name = replace_na(full_name,"Other"),
+#          mean_num = round(mean_num)) %>%
+#   mutate(full_name = fct_reorder(full_name, mean_num, tail, n = 1, .desc = TRUE)) %>%
+#   mutate(  arrival_date_month   = factor(month.abb[arrival_date_month],levels=month.abb) ) %>% 
+#   ggplot()+
+#   geom_line( data= .%>%  filter(full_name %in% all_hotels_top  ) ,
+#              aes(x=arrival_date_month,y=mean_num,group=full_name,col=full_name),
+#              size=1.2)+
+#   geom_line( data= .%>%  filter(!full_name %in% all_hotels_top  ) ,
+#              aes(x=arrival_date_month,y=mean_num,group=full_name),
+#              alpha=0.2)+
+#   theme_minimal()+
+#   labs(title="Mean number of origin of country bookings for city hotel",x=NULL,y="Number of bookings",col="Country")
+
+ ## Old version of Resort Hotel
+
+# hotels %>%
+#   filter(!country  %in% c("NULL","TEMP"),
+#          hotel == "Resort Hotel") %>%
+#   mutate(country =str_replace(country,"CN","CAN"),
+#     #    arrival_date =  lubridate::dmy( paste(arrival_date_day_of_month,arrival_date_month,arrival_date_year))
+#      arrival_date_month = factor(arrival_date_month, levels = month.name)
+#          )%>%
+#   group_by(arrival_date_month,arrival_date_year ) %>%
+#   count(country,sort = TRUE) %>%
+#   ungroup() %>%
+#   group_by(country,arrival_date_month) %>%
+#     summarise(mean_num = mean(n), .groups = "drop"  ) %>%
+#   left_join(country_table,by=c("country"="short_name"))%>%
+#   mutate(full_name = replace_na(full_name,"Other"),
+#          mean_num = round(mean_num)) %>%
+#   mutate(full_name = fct_reorder(full_name, mean_num, tail, n = 1, .desc = TRUE)) %>%
+#   mutate(  arrival_date_month   = factor(month.abb[arrival_date_month],levels=month.abb) ) %>%
+#   ggplot()+
+#   geom_line( data= .%>%  filter(full_name %in% all_hotels_top  ) ,
+#              aes(x=arrival_date_month,y=mean_num,group=full_name,col=full_name),
+#              size=1.2)+
+#   geom_line( data= .%>%  filter(!full_name %in% all_hotels_top  ) ,
+#              aes(x=arrival_date_month,y=mean_num,group=full_name),
+#              alpha=0.2)+
+#   theme_minimal()+
+#   labs(title="Mean number of origin of country bookings for all hotels",x=NULL,y="Number of bookings",col="Country")
+```
+
+
+```{r}
+hotels %>%
+  filter(!country  %in% c("NULL","TEMP") ) %>% 
+  mutate(country =str_replace(country,"CN","CAN"),
+     arrival_date_month = factor(arrival_date_month, levels = month.name)
+         )%>%
+  group_by(arrival_date_month,arrival_date_year,hotel ) %>% 
+  count(country,sort = TRUE) %>%
+  ungroup() %>%
+  group_by(country,arrival_date_month,hotel) %>% 
+    summarise(mean_num = mean(n), .groups = "drop"  ) %>% 
+  left_join(country_table,by=c("country"="short_name"))%>%
+  mutate(full_name = replace_na(full_name,"Other"),
+         mean_num = round(mean_num)) %>%
+  mutate(full_name = fct_reorder(full_name, mean_num, tail, n = 1, .desc = TRUE)) %>%
+  mutate(  arrival_date_month   = factor(month.abb[arrival_date_month],levels=month.abb) ) %>% 
+  ggplot()+
+    geom_line( data= .%>%  filter(!full_name %in% all_hotels_top  ) ,
+             aes(x=arrival_date_month,y=mean_num,group=full_name),
+             alpha=0.2)+
+  geom_line( data= .%>%  filter(full_name %in% all_hotels_top  ) ,
+             aes(x=arrival_date_month,y=mean_num,group=full_name,col=full_name),
+             size=1.2)+
+  facet_wrap(.~hotel)+
+  theme_bw()+
+  theme(legend.position = "top",
+        panel.grid.major.x = element_blank())+
+  labs(title="Average monthly bookings by country of origin",x=NULL,y="Number of bookings",col="Country")
+```
+
+
+We notice several interesting behaviours:
+
+* Portugal regularly the top the list of most common country, but experiences some monthly changes.
+
+* French and Germans tend to prefer the city hotel rather than the resort hotel.
+
+* People from the United Kingdom tend to prefer resorts over city of hotel, to the point where they made up the most common country for several months, surpassing the Portuguese. 
+
+
+
+```{r}
+hotels %>%
+  filter(!country  %in% c("NULL","TEMP") ) %>% 
+  mutate(country =str_replace(country,"CN","CAN"),
+             country = fct_lump_n(country,n=30),
+     arrival_date_month = factor(arrival_date_month, levels = month.name)
+         )%>%
+  group_by(hotel ) %>% 
+  count(country,sort = TRUE) %>%
+  ungroup()%>%
+  group_by(country) %>% 
+  mutate(prop = n/sum(n))%>%
+  filter(hotel == "City Hotel") %>%
+  #mutate( prop = prop-0.5) %>%
+  left_join(country_table,by=c("country"="short_name"))%>%
+  mutate(full_name = replace_na(full_name,"Other*") ) %>% 
+  filter(full_name !="Other*") %>% 
+  mutate(full_name =  glue::glue("{full_name} ({n})") )%>%
+  ggplot(aes(x=prop,y=reorder(full_name,prop) ))+
+#  geom_col()+
+  geom_col(aes(fill= prop > 0.5))+
+  scale_x_continuous(labels = scales::percent_format(), breaks = round(seq(0,1,0.1),1), minor_breaks = NULL, expand=c(0,0),limits = c(0,1.05) )+
+#  scale_x_continuous(trans =  scales::trans_new("shift",
+#                             transform = function(x) {x-0.5},
+#                             inverse = function(x) {x+0.5}),
+#                     labels = scales::percent_format(), breaks = round(seq(0.1,1,0.1),1), minor_breaks = NULL, limits = c(0.29,1) )+
+#  geom_vline(xintercept = 0.5,lty=5,col="grey50",size=1)+
+  geom_vline(xintercept = 0.608,lty=5,col="grey50",size=1,alpha=0.5)+
+ # geom_text(aes(label= scales::percent(prop,accuracy=1),hjust=  if_else(prop>0.5,-.1,1) ),size=3)+
+  geom_text(aes(label= scales::percent(prop,accuracy=0.1),hjust=-.1),size=3)+
+  annotate("text",x=0.7, y=3,label="Average Country\nPercent\n(60.8%)",col="grey50",size=3)+
+  theme_minimal()+
+  theme(legend.position = "bottom") +
+  labs(title="Percent of people from countries that went to city hotel", subtitle = "Country (Number of bookings at city)",
+       x="Percent destination to city ", y="Country",fill="Majority Destination")+
+  scale_fill_manual(values = c("#F8766D","#00BFC4"), labels = c("Resort","City"), guide = guide_legend(reverse = TRUE))
+
+
+```
+
+We see that Israelis preferred going to the city hotel over the resort hotel; 484 chose to do so. The Canadians, British, and Irish all preferred going to the resort than the city. 
+
+
+
+```{r}
+hotels %>%
+  filter(!country  %in% c("NULL","TEMP") ) %>% 
+  mutate(country =str_replace(country,"CN","CAN"),
+             country = fct_lump_n(country,n=20),
+     arrival_date_month = factor(arrival_date_month, levels = month.name)
+         )%>%
+  filter(country != "Other") %>% 
+  group_by(hotel ) %>% 
+  count(country,sort = TRUE) %>%
+  ungroup()%>%
+  group_by(country) %>% 
+  mutate(prop = n/sum(n))%>%
+  ungroup() %>% 
+  group_by(hotel) %>%
+  summarise(t_count = sum(n)) %>%
+  ungroup() %>% 
+  mutate( prop =t_count/sum(t_count)    )
+```
+
+The average proportion that went to city or resort hotel, when the least common countries were filtered out.
+
+# Meals
+
+
+```{r}
+hotels %>% 
+  mutate(is_repeated_guest = factor(is_repeated_guest),
+         meal = case_when(   meal == "BB" ~ "BB",
+                                meal == "HB" ~ "HB",
+                                meal == "FB" ~ "FB",
+                                TRUE ~ "SC")  
+         )%>% 
+  group_by(hotel) %>% 
+  count(meal) %>%
+#  ungroup()%>%
+  ggplot(aes(x=meal,y=n,fill=hotel))+
+  geom_col( position = position_dodge() )+
+  geom_text(aes(label=n),position = position_dodge(width=.9),vjust=-.5)+
+  #facet_wrap(.~is_repeated_guest, nrow=2) +
+  theme_minimal()+
+  theme(panel.grid.major.x = element_blank() )+
+  labs(title="Number of Meals Booked by Hotel",x="Meal",y="Number of Meals",fill="Hotel")
+```
+
+We see the most common mean orderd at both hotels were the bed board, i.ie a bed and breakfast.
+
+
+Do meals types change during the year?
+
+
+```{r}
+hotels %>%
+    mutate( 
+      arrival_date_month = factor(arrival_date_month, levels =  month.name) ,
+      meal = case_when(   meal == "BB" ~ "BB",
+                                meal == "HB" ~ "HB",
+                                meal == "FB" ~ "FB",
+                                TRUE ~ "SC")  
+         ) %>% 
+  
+  count(hotel,arrival_date_month,meal) %>%
+  ggplot(aes(x=arrival_date_month,y=n,fill=meal,group=meal)  ) +
+  geom_col(position = "fill",alpha=0.8)+
+  facet_wrap(.~hotel,nrow=2)+
+  theme_bw()+
+  theme(legend.position = "top"  )+
+  labs(title = "Proportions of Meals Ordered by Month and Hotel",x="Month",y="Proportion",fill="Meal")
+```
+
+We see some changes in the meals ordered by month.
+
+Finally we see a table of the number of meals ordered by hotel and month.
+
+
+```{r}
+hotels %>%
+    mutate( 
+      arrival_date_month = factor(arrival_date_month, levels =  month.name) ,
+      meal = case_when(   meal == "BB" ~ "BB",
+                                meal == "HB" ~ "HB",
+                                meal == "FB" ~ "FB",
+                                TRUE ~ "SC")  
+         ) %>% 
+  
+  count(hotel,arrival_date_month,meal) %>%
+  group_by(hotel) %>%
+  pivot_wider(names_from = arrival_date_month,values_from=n)%>%
+  ungroup() %>% 
+  select(-hotel) %>% 
+  rename(" " = meal) %>% 
+  kableExtra::kbl(caption = "Number of meals ordered during period by month and hotel")%>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover")) %>% 
+  kableExtra::group_rows(index = c("City Hotel" = 4, "Resort Hotel" = 4)) %>% 
+  kableExtra::add_header_above(c("Meal Type", "Month" = 12))
+```
+

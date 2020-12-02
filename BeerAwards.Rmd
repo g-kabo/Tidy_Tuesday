@@ -74,8 +74,14 @@ beer_awards_fct %>%
   theme_minimal()+
   theme(legend.position = "top", 
         panel.grid.major.x = element_blank())+
-  labs(title="Californian Breweries Are The Most Successful",subtitle="Number Of Awards Received By State Of Brewery",x="State",y="Number of Awards",fill="Medal")
+  labs(title="Californian Breweries Are The Most Successful",subtitle="Number Of Awards Received By State Of Brewery",x="State",y="Number of Awards",fill="Medal")+
+ scale_y_continuous(expand = c(0,50) )
 ```
+
+This graph shows that the top three most successful states in temrs of medals won for beers are: California, Colorado, and Oregon. The least successful were: 
+Rhode Island, Oklahoma, Mississippi, and North Dakota.
+
+
 
 ```{r}
 beer_awards_fct %>%
@@ -100,6 +106,8 @@ group_by(brewery,medal)%>%
 
 ```
 
+Pabst Brewing CO were the most successful brewery in terms of the number of medals.
+
 ```{r}
 beer_awards_fct %>%
   group_by(brewery,state,medal)%>%
@@ -122,6 +130,11 @@ beer_awards_fct %>%
   labs(title="Top 10 Individual Breweries by Total Medal Count",subtitle = "With State Labelled",x="Medal Count",y="Brewery",fill="Medal")
 ```
 
+This time we separate out the breweries at a state level; meaning we are now looking at individuals breweries at a specific state, rather than a group of them.
+
+Anheuser-Busch is the best performing single brewery from the state of Missouri.
+
+
 Let's find which cities were best at crafting beers?
 
 ```{r}
@@ -136,6 +149,9 @@ beer_awards_fct %>%
   theme(panel.grid.major.y = element_blank() )+
   labs(title="Which Cities Are Home To The Most Awarded Breweries?",x="Number of Awards",y="City",fill="State")
 ```
+
+We see that Denver from the State of Colorado was the most successful, obtaining 145 medals. Other successful cities from Colorado include: Fort Collins, and Golden.
+
 
 Which Beer won the most?
 
